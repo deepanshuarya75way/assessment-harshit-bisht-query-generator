@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI SQL Query Generator</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #222; }
+  h1 { font-size: 20px; }
+  textarea { width: 100%; box-sizing: border-box; padding: 10px; font-size: 15px; border-radius: 6px; border: 1px solid #ccc; resize: vertical; }
+  select { padding: 8px 10px; font-size: 14px; border-radius: 6px; border: 1px solid #ccc; background: #fff; }
+  label { font-size: 13px; color: #555; display: block; margin-bottom: 4px; }
+  button { margin-top: 14px; padding: 8px 16px; font-size: 14px; border-radius: 6px; border: none; background: #222; color: #fff; cursor: pointer; }
+  button:disabled { background: #999; cursor: default; }
+  pre { background: #f5f5f4; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+  th { background: #f5f5f4; }
+  .error { color: #b3261e; background: #fbeaea; padding: 10px; border-radius: 6px; }
+  .note { color: #7a5b00; background: #fff8e6; padding: 10px; border-radius: 6px; font-size: 13px; margin-top: 8px; }
+  .section { margin-top: 24px; }
+  .muted { color: #777; font-size: 13px; }
+  .row { display: flex; gap: 24px; align-items: flex-end; margin-top: 14px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <h1>AI SQL query generator</h1>
+  <p class="muted">Ask a question about the sample e-commerce database (customers, products, orders, order_items).</p>
+
+  <textarea id="question" rows="2" placeholder="e.g. Which customers spent the most money?"></textarea>
+
+  <div class="row">
+    <div>
+      <label for="dialect">Which database would you like the query written for?</label>
+      <select id="dialect">
+        <option value="sqlite" selected>SQLite</option>
+        <option value="mysql">MySQL</option>
+        <option value="postgresql">PostgreSQL</option>
+        <option value="mssql">Microsoft SQL Server</option>
+        <option value="oracle">Oracle</option>
+        <option value="mongodb">MongoDB</option>
+        <option value="redis">Redis</option>
+      </select>
+    </div>
+    <button id="askBtn" onclick="ask()">Generate query</button>
+  </div>
+
+  <div id="sqlSection" class="section" style="display:none">
+    <h3 id="sqlHeading">Generated SQL</h3>
+    <pre id="sqlOutput"></pre>
+    <div id="noteOutput" class="note" style="display:none"></div>
+  </div>
+
+  <div id="resultSection" class="section" style="display:none">
+    <h3>Results</h3>
+    <div id="resultOutput"></div>
+  </div>
+
+  <div id="errorSection" class="section" style="display:none">
+    <div class="error" id="errorOutput"></div>
+  </div>
+
+<script>
+async function ask() {
+  const question = document.getElementById('question').value.trim();
+  const dialect = document.getElementById('dialect').value;
+  if (!question) return;
+
+  const btn = document.getElementById('askBtn');
+  btn.disabled = true;
+  btn.textContent = 'Thinking...';
+
+  document.getElementById('sqlSection').style.display = 'none';
+  document.getElementById('resultSection').style.display = 'none';
+  document.getElementById('errorSection').style.display = 'none';
+  document.getElementById('noteOutput').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, dialect })
+    });
+    const data = await res.json();
+
+    if (data.generated_sql) {
+      document.getElementById('sqlHeading').textContent =
+        data.dialect_label ? `Generated query (${data.dialect_label})` : 'Generated SQL';
+      document.getElementById('sqlOutput').textContent = data.generated_sql;
+      document.getElementById('sqlSection').style.display = 'block';
+
+      if (data.note) {
+        document.getElementById('noteOutput').textContent = data.note;
+        document.getElementById('noteOutput').style.display = 'block';
+      }
+    }
+
+    if (data.error) {
+      document.getElementById('errorOutput').textContent = data.error;
+      document.getElementById('errorSection').style.display = 'block';
+    } else {
+      renderTable(data.columns, data.rows, data.truncated);
+      document.getElementById('resultSection').style.display = 'block';
+    }
+  } catch (e) {
+    document.getElementById('errorOutput').textContent = 'Request failed: ' + e.message;
+    document.getElementById('errorSection').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate query';
+  }
+}
+
+function renderTable(columns, rows, truncated) {
+  if (!columns || columns.length === 0) {
+    document.getElementById('resultOutput').innerHTML = '<p class="muted">No columns returned.</p>';
+    return;
+  }
+  let html = '<table><thead><tr>';
+  columns.forEach(c => html += `<th>${c}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>' + row.map(v => `<td>${v === null ? '<span class="muted">null</span>' : v}</td>`).join('') + '</tr>';
+  });
+  html += '</tbody></table>';
+  if (truncated) html += '<p class="muted">Results truncated to the row limit.</p>';
+  document.getElementById('resultOutput').innerHTML = html;
+}
+
+document.getElementById('question').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); }
+});
+</script>
+</body>
+</html>

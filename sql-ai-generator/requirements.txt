@@ -1,0 +1,6 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlglot==25.24.0
+python-dotenv==1.0.1
+# Ollama needs no Python package -- it's called over local HTTP (stdlib urllib).
+# Install Ollama itself separately from https://ollama.com
